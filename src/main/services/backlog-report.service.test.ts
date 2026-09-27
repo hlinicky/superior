@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentTask } from '@shared/types'
 import { formatDuration, planBacklogUpdate, reportTaskTransition } from './backlog-report.service'
 
@@ -13,6 +13,16 @@ import { formatDuration, planBacklogUpdate, reportTaskTransition } from './backl
 const electron = vi.hoisted(() => ({ getPath: vi.fn() }))
 vi.mock('electron', () => ({ app: { getPath: electron.getPath } }))
 electron.getPath.mockReturnValue(fs.mkdtempSync(path.join(os.tmpdir(), 'superior-report-ud-')))
+
+// The failure-mode tests below only need editBacklogTask to reject; spawning a
+// real child just to get a rejection ties a temp directory's lifetime to a
+// process exit, and on Windows a child's cwd stays locked briefly after it.
+// isBacklogRepo stays real — the folder-gone test depends on it.
+const backlog = vi.hoisted(() => ({ editBacklogTask: vi.fn() }))
+vi.mock('./backlog.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./backlog.service')>()),
+  editBacklogTask: backlog.editBacklogTask
+}))
 
 const NOW = new Date('2026-09-27T14:03:22.000Z')
 
@@ -138,33 +148,24 @@ describe('planBacklogUpdate', () => {
 })
 
 describe('a failed report never fails the task', () => {
+  beforeEach(() => {
+    backlog.editBacklogTask.mockReset()
+  })
+
   it('survives a CLI that rejects an unknown task id', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-report-'))
     fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
-    const cli = path.join(dir, 'failing-cli.js')
-    fs.writeFileSync(cli, 'process.exit(1)')
-    process.env.SUPERIOR_BACKLOG_CLI = cli
+    backlog.editBacklogTask.mockRejectedValueOnce(new Error('Command failed: task edit task-999'))
     try {
       expect(() =>
         reportTaskTransition(task({ status: 'done', exitCode: 0, folderPath: dir }), 'running')
       ).not.toThrow()
-      // Allow async operations to complete before cleanup
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(1))
+      expect(backlog.editBacklogTask).toHaveBeenCalledWith(
+        expect.objectContaining({ repoPath: dir, taskId: 'task-42', status: 'Done' })
+      )
     } finally {
-      delete process.env.SUPERIOR_BACKLOG_CLI
-      // Try multiple times to handle Windows file locking issues
-      let attempts = 0
-      while (attempts < 5) {
-        try {
-          fs.rmSync(dir, { recursive: true, force: true })
-          break
-        } catch (e) {
-          attempts++
-          if (attempts < 5) {
-            await new Promise((resolve) => setTimeout(resolve, 100))
-          }
-        }
-      }
+      fs.rmSync(dir, { recursive: true, force: true })
     }
   })
 
@@ -175,5 +176,43 @@ describe('a failed report never fails the task', () => {
         'running'
       )
     ).not.toThrow()
+    expect(backlog.editBacklogTask).not.toHaveBeenCalled()
+  })
+})
+
+describe('a missing CLI is a standing condition, not news', () => {
+  it('warns once per run however many tasks report', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    backlog.editBacklogTask.mockReset()
+    backlog.editBacklogTask.mockRejectedValue(
+      new Error('Could not find the backlog CLI. Install it with `npm i -g backlog.md`, or set SUPERIOR_BACKLOG_CLI to the path of its cli.js.')
+    )
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-nocli-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    try {
+      reportTaskTransition(task({ status: 'done', exitCode: 0, folderPath: dir }), 'running')
+      reportTaskTransition(task({ id: 'b2c3', status: 'done', exitCode: 0, folderPath: dir }), 'running')
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(2))
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not let that latch suppress unrelated failures', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    backlog.editBacklogTask.mockReset()
+    backlog.editBacklogTask.mockRejectedValue(new Error('Command failed: task edit task-42'))
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-other-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    try {
+      reportTaskTransition(task({ status: 'done', exitCode: 0, folderPath: dir }), 'running')
+      reportTaskTransition(task({ id: 'c3d4', status: 'done', exitCode: 0, folderPath: dir }), 'running')
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2))
+    } finally {
+      warn.mockRestore()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

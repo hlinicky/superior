@@ -88,6 +88,8 @@ export function reportTaskTransition(task: AgentTask, previousStatus?: AgentTask
     if (!isBacklogRepo(task.folderPath)) return
 
     const preset = listPresets().presets.find((p) => p.id === task.presetId)
+    // A raw preset id in the note beats losing the note entirely when a preset has
+    // been deleted since the task ran.
     const plan = planBacklogUpdate(task, previousStatus, preset?.name ?? task.presetId, new Date())
     if (!plan) return
 
