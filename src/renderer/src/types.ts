@@ -5,6 +5,7 @@
 // Runtime value (worktree error codes) — re-exported so renderer modules keep
 // importing from './types' rather than reaching into the shared layer.
 export { WORKTREE_ERROR } from '@shared/types'
+export { parseBacklogTaskId } from '@shared/backlogTaskId'
 
 export type {
   AgentDataEvent,

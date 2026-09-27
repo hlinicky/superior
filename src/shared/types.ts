@@ -278,6 +278,11 @@ export interface AgentTask {
   presetId: string
   /** Run in a fresh worktree-backed workspace (a new task/<slug> branch). */
   useWorktree: boolean
+  /**
+   * The Backlog.md task this run is about, parsed from the prompt when the task
+   * was queued. Absent when the prompt named none — reporting is skipped then.
+   */
+  backlogTaskId?: string
   status: AgentTaskStatus
   /** The terminal session running/having run the task; set on start. */
   sessionId?: string
