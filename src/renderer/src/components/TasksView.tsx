@@ -197,6 +197,11 @@ export function TasksView({ folderPath, queue, presets, onJumpTo }: Props): Reac
                 {task.branch ?? t('tasks.worktree')}
               </span>
             )}
+            {task.backlogTaskId && (
+              <span className="font-mono" title={t('tasks.backlogLinked')}>
+                {task.backlogTaskId}
+              </span>
+            )}
             <span className={task.status === 'failed' ? 'text-danger' : ''}>
               {statusLabel(task)}
             </span>

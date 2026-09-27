@@ -3,6 +3,7 @@ import { useToast } from '../components/ui'
 import { useI18n } from '../i18n'
 import { taskExitOutcome } from '../taskExit'
 import { ipcErrorMessage } from '../ipcError'
+import { newQueuedTask, retriedQueuedTask } from '../taskQueueShape'
 import type {
   AgentSession,
   AgentTask,
@@ -401,15 +402,16 @@ export function useTaskQueue(deps: Deps): TaskQueueApi {
       presetId: string
       useWorktree: boolean
     }) => {
-      await persistTask({
-        id: crypto.randomUUID(),
-        folderPath: args.folderPath,
-        prompt: args.prompt.trim(),
-        presetId: args.presetId,
-        useWorktree: args.useWorktree,
-        status: 'queued',
-        createdAt: Date.now()
-      })
+      await persistTask(
+        newQueuedTask({
+          id: crypto.randomUUID(),
+          folderPath: args.folderPath,
+          prompt: args.prompt,
+          presetId: args.presetId,
+          useWorktree: args.useWorktree,
+          createdAt: Date.now()
+        })
+      )
     },
     [persistTask]
   )
@@ -437,16 +439,7 @@ export function useTaskQueue(deps: Deps): TaskQueueApi {
     async (id: string) => {
       const task = tasksRef.current.find((tk) => tk.id === id)
       if (!task || (task.status !== 'failed' && task.status !== 'canceled')) return
-      await persistTask({
-        id: crypto.randomUUID(),
-        ...(task.error?.startsWith('setup-failed:') ? { workspaceId: task.workspaceId, branch: task.branch } : {}),
-        folderPath: task.folderPath,
-        prompt: task.prompt,
-        presetId: task.presetId,
-        useWorktree: task.useWorktree,
-        status: 'queued',
-        createdAt: Date.now()
-      })
+      await persistTask(retriedQueuedTask(task, crypto.randomUUID(), Date.now()))
     },
     [persistTask]
   )

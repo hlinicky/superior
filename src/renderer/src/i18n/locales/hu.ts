@@ -641,6 +641,7 @@ export const hu: Record<MessageKey, string> = {
   'tasks.retry': 'Feladat újrapróbálása',
   'tasks.moveUp': 'Mozgatás feljebb',
   'tasks.moveDown': 'Mozgatás lejjebb',
+  'tasks.backlogLinked': 'Befejezéskor jelenti az eredményt ebbe a Backlog feladatba',
   'keyboard.conflict': 'A(z) {chord} már a(z) „{action}” művelethez tartozik.',
   'keyboard.focusCell': 'Fókusz az 1–9. terminálra',
   'presets.markActive': '{name} megjelölése aktívként',

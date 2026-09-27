@@ -641,6 +641,7 @@ export const pl: Record<MessageKey, string> = {
   'tasks.retry': 'Ponów zadanie',
   'tasks.moveUp': 'Przenieś wyżej',
   'tasks.moveDown': 'Przenieś niżej',
+  'tasks.backlogLinked': 'Po zakończeniu zgłosi wynik do tego zadania Backlog',
   'keyboard.conflict': '{chord} jest już używany przez akcję „{action}”.',
   'keyboard.focusCell': 'Fokus na terminal 1–9',
   'presets.markActive': 'Oznacz {name} jako aktywny',

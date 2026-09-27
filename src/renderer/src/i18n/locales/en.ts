@@ -637,6 +637,7 @@ export const en = {
   'tasks.retry': 'Retry task',
   'tasks.moveUp': 'Move up',
   'tasks.moveDown': 'Move down',
+  'tasks.backlogLinked': 'Reports to this Backlog task when it finishes',
   'keyboard.conflict': '{chord} is already used by “{action}”.',
   'keyboard.focusCell': 'Focus terminal 1–9',
   'presets.markActive': 'Mark {name} active',

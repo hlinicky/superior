@@ -642,6 +642,7 @@ export const sk: Record<MessageKey, string> = {
   'tasks.retry': 'Skúsiť úlohu znova',
   'tasks.moveUp': 'Posunúť vyššie',
   'tasks.moveDown': 'Posunúť nižšie',
+  'tasks.backlogLinked': 'Po dokončení nahlási výsledok do tohto Backlog tasku',
   'keyboard.conflict': '{chord} už používa akcia „{action}“.',
   'keyboard.focusCell': 'Fokus na terminál 1–9',
   'presets.markActive': 'Označiť {name} ako aktívny',
