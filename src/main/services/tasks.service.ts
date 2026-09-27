@@ -1,5 +1,19 @@
-import type { AgentTask, TasksState } from '@shared/types'
+import type { AgentTask, AgentTaskStatus, TasksState } from '@shared/types'
 import { readJsonFile, userDataFile, writeJsonFile } from '../lib/jsonStore'
+
+/**
+ * The store stays a dumb record of the queue; it does not learn what Backlog
+ * is. It emits, and main wires a reporter to the emission — which is why
+ * saveTask can be the single hook for all five paths into a terminal state
+ * without this file gaining a dependency on any of them.
+ */
+type TaskTransitionListener = (task: AgentTask, previousStatus?: AgentTaskStatus) => void
+
+let transitionListener: TaskTransitionListener | null = null
+
+export function setTaskTransitionListener(listener: TaskTransitionListener | null): void {
+  transitionListener = listener
+}
 
 function storeFile(): string {
   return userDataFile('tasks.json')
@@ -51,9 +65,22 @@ export function listTasks(): TasksState {
 export function saveTask(task: AgentTask): TasksState {
   const state = read()
   const idx = state.tasks.findIndex((t) => t.id === task.id)
+  const previousStatus = idx >= 0 ? state.tasks[idx].status : undefined
   if (idx >= 0) state.tasks[idx] = task
   else state.tasks.push(task)
   save(state)
+
+  // A brand new task is normally 'queued', which means nothing has happened to
+  // report. Anything else on a first sighting is a real transition.
+  const changed = previousStatus !== task.status && !(previousStatus === undefined && task.status === 'queued')
+  if (changed && transitionListener) {
+    try {
+      transitionListener(task, previousStatus)
+    } catch (err) {
+      // Reporting is an accessory to the queue, never a condition of it.
+      console.warn('[tasks] transition listener failed:', err)
+    }
+  }
   return state
 }
 

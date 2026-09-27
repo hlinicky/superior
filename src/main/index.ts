@@ -26,6 +26,8 @@ import { registerUpdateIpc } from './ipc/update.ipc'
 import { registerClipboardIpc } from './ipc/clipboard.ipc'
 import { isUpdatePending, releaseDaemonForUpdate } from './services/update.service'
 import { daemonClient } from './services/daemonClient'
+import { setTaskTransitionListener } from './services/tasks.service'
+import { reportTaskTransition } from './services/backlog-report.service'
 
 const isMac = process.platform === 'darwin'
 
@@ -175,6 +177,9 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   registerPresetsIpc()
   registerPromptsIpc()
   registerTasksIpc()
+  // A finished agent run should have already updated the Backlog task its
+  // prompt named by the time the phone is looked at.
+  setTaskTransitionListener(reportTaskTransition)
   registerIntegrationsIpc()
   registerWindowIpc()
   registerNotificationsIpc(() => mainWindow)
