@@ -118,6 +118,21 @@ function resolved(): BacklogCommand {
 }
 
 /**
+ * What CLI the last successful resolution found, for diagnostic messages only.
+ * Null before anything has resolved, or after the only attempt found nothing —
+ * there is nothing to name in that case, and the "could not find" error already
+ * says so.
+ */
+export function describeResolvedBacklogCli(): string | null {
+  return memo?.describe ?? null
+}
+
+// A spawn that never exits would leak a child process forever, one per
+// transition. The measured healthy round trip is ~550ms; 30s is generous
+// headroom for a slow disk without letting a wedged CLI pile up children.
+const SPAWN_TIMEOUT_MS = 30_000
+
+/**
  * Edit one task in one repository. Rejects on anything going wrong — a missing
  * CLI, an unknown task id, a folder that no longer exists. Callers decide what
  * a failure means; nothing here is swallowed, so nothing here is hidden.
@@ -137,6 +152,46 @@ export async function editBacklogTask(args: {
     cwd: args.repoPath,
     shell: false,
     windowsHide: true,
+    timeout: SPAWN_TIMEOUT_MS,
     env: cli.runAsNode ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env
   })
+}
+
+/** The status text on an icon-prefixed `Status:` line, e.g. `✔ Done` -> `Done`. */
+function parseStatusLine(stdout: string): string | null {
+  const match = /^Status:\s*\S+\s+(.+?)\s*$/m.exec(stdout)
+  return match ? match[1] : null
+}
+
+/**
+ * Current Backlog status of one task, or null when it cannot be read — no CLI,
+ * an unknown id, unparsable output. Callers treat null as "proceed as if this
+ * check was never made": this is a best-effort read guarding a demotion, not a
+ * condition anything should fail on.
+ *
+ * Parses `backlog task <id> --plain`, verified against a real Backlog.md 1.52.0
+ * repository:
+ *
+ *   Task TASK-1 - Probe task
+ *   ==================================================
+ *
+ *   Status: ✔ Done
+ *   Ordinal: 1000
+ *   Created: 2026-09-27 22:24 (UTC)
+ */
+export async function readBacklogTaskStatus(repoPath: string, taskId: string): Promise<string | null> {
+  try {
+    const cli = resolved()
+    const argv = [...cli.prefixArgs, 'task', taskId, '--plain']
+    const { stdout } = await execFileAsync(cli.command, argv, {
+      cwd: repoPath,
+      shell: false,
+      windowsHide: true,
+      timeout: SPAWN_TIMEOUT_MS,
+      env: cli.runAsNode ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env
+    })
+    return parseStatusLine(stdout)
+  } catch {
+    return null
+  }
 }

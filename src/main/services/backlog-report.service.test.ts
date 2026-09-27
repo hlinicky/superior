@@ -17,12 +17,38 @@ electron.getPath.mockReturnValue(fs.mkdtempSync(path.join(os.tmpdir(), 'superior
 // The failure-mode tests below only need editBacklogTask to reject; spawning a
 // real child just to get a rejection ties a temp directory's lifetime to a
 // process exit, and on Windows a child's cwd stays locked briefly after it.
-// isBacklogRepo stays real — the folder-gone test depends on it.
-const backlog = vi.hoisted(() => ({ editBacklogTask: vi.fn() }))
-vi.mock('./backlog.service', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./backlog.service')>()),
-  editBacklogTask: backlog.editBacklogTask
+// readBacklogTaskStatus is mocked for the same reason — left real, it would
+// resolve and spawn whatever backlog CLI happens to be on the machine running
+// these tests. isBacklogRepo stays real — the folder-gone test depends on it.
+const backlog = vi.hoisted(() => ({
+  editBacklogTask: vi.fn(),
+  readBacklogTaskStatus: vi.fn(),
+  describeResolvedBacklogCli: vi.fn(),
+  // Wraps the real isBacklogRepo (set below) rather than replacing its
+  // behaviour — this exists only so a test can see *when* it was called,
+  // which a real ESM export can't be spied on directly for.
+  isBacklogRepo: vi.fn()
 }))
+vi.mock('./backlog.service', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./backlog.service')>()
+  backlog.isBacklogRepo.mockImplementation(original.isBacklogRepo)
+  return {
+    ...original,
+    editBacklogTask: backlog.editBacklogTask,
+    readBacklogTaskStatus: backlog.readBacklogTaskStatus,
+    describeResolvedBacklogCli: backlog.describeResolvedBacklogCli,
+    isBacklogRepo: backlog.isBacklogRepo
+  }
+})
+
+// Both mocks default to "nothing special going on" so tests that don't touch
+// them (most of them — only a To Do demotion ever calls readBacklogTaskStatus)
+// see the same behaviour as before these existed.
+beforeEach(() => {
+  backlog.readBacklogTaskStatus.mockReset().mockResolvedValue(null)
+  backlog.describeResolvedBacklogCli.mockReset().mockReturnValue('node fake-cli.js')
+  backlog.isBacklogRepo.mockClear()
+})
 
 const NOW = new Date('2026-09-27T14:03:22.000Z')
 
@@ -134,6 +160,52 @@ describe('planBacklogUpdate', () => {
     expect(plan?.appendNotes).not.toContain('null')
   })
 
+  it('leaves a status the agent already set to Done alone, but still appends the note', () => {
+    const plan = planBacklogUpdate(
+      task({ status: 'failed', exitCode: 1, startedAt: NOW.getTime() - 5_000, finishedAt: NOW.getTime() }),
+      'running',
+      'claude',
+      NOW,
+      'Done'
+    )
+    expect(plan?.status).toBeUndefined()
+    expect(plan?.appendNotes).toBe('superior: failed · exit 1 · claude · 5s · 2026-09-27 14:03 UTC')
+  })
+
+  it('still demotes to To Do when the current status is not Done', () => {
+    const plan = planBacklogUpdate(
+      task({ status: 'failed', exitCode: 1, startedAt: NOW.getTime() - 5_000, finishedAt: NOW.getTime() }),
+      'running',
+      'claude',
+      NOW,
+      'In Progress'
+    )
+    expect(plan?.status).toBe('To Do')
+  })
+
+  it('does not apply the already-Done exception to a clean finish', () => {
+    // Done -> Done is not a demotion in the first place; currentBacklogStatus
+    // is irrelevant here and must not suppress the status write.
+    const plan = planBacklogUpdate(
+      task({ status: 'done', exitCode: 0, startedAt: NOW.getTime() - 5_000, finishedAt: NOW.getTime() }),
+      'running',
+      'claude',
+      NOW,
+      'Done'
+    )
+    expect(plan?.status).toBe('Done')
+  })
+
+  it('includes the pre-spawn failure reason after the preset segment', () => {
+    const plan = planBacklogUpdate(
+      task({ status: 'failed', error: 'preset-missing', startedAt: NOW.getTime(), finishedAt: NOW.getTime() }),
+      'queued',
+      'preset-claude',
+      NOW
+    )
+    expect(plan?.appendNotes).toBe('superior: failed · preset-claude · preset-missing · 0s · 2026-09-27 14:03 UTC')
+  })
+
   it('does nothing for a task with no Backlog link', () => {
     expect(planBacklogUpdate(task({ status: 'running', backlogTaskId: undefined }), 'queued', 'claude', NOW)).toBeNull()
   })
@@ -180,6 +252,147 @@ describe('a failed report never fails the task', () => {
   })
 })
 
+describe('a demotion checks whether the agent already finished the work', () => {
+  beforeEach(() => {
+    backlog.editBacklogTask.mockReset().mockResolvedValue(undefined)
+  })
+
+  it('reads current status only for a To Do demotion, and writes note-only when it is already Done', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-alreadydone-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    backlog.readBacklogTaskStatus.mockResolvedValueOnce('Done')
+    try {
+      reportTaskTransition(
+        task({ status: 'failed', exitCode: 1, folderPath: dir, backlogTaskId: 'task-already-done' }),
+        'running'
+      )
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(1))
+      expect(backlog.readBacklogTaskStatus).toHaveBeenCalledWith(dir, 'task-already-done')
+      expect(backlog.editBacklogTask).toHaveBeenCalledWith(
+        expect.objectContaining({ repoPath: dir, taskId: 'task-already-done', status: undefined })
+      )
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('never reads current status for a clean finish, which is never a demotion', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-nodemote-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    try {
+      reportTaskTransition(
+        task({ status: 'done', exitCode: 0, folderPath: dir, backlogTaskId: 'task-clean' }),
+        'running'
+      )
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(1))
+      expect(backlog.readBacklogTaskStatus).not.toHaveBeenCalled()
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('two edits for one task never race', () => {
+  beforeEach(() => {
+    backlog.editBacklogTask.mockReset()
+  })
+
+  it('serialises a slow start against a fast finish so the finish cannot land first', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-race-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    const order: string[] = []
+    let releaseStart: () => void = () => {}
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve
+    })
+    backlog.editBacklogTask.mockImplementationOnce(async () => {
+      order.push('start-write-began')
+      await startGate
+      order.push('start-write-done')
+    })
+    backlog.editBacklogTask.mockImplementationOnce(async () => {
+      order.push('finish-write-began')
+    })
+    try {
+      reportTaskTransition(
+        task({ status: 'running', startedAt: NOW.getTime(), folderPath: dir, backlogTaskId: 'task-race' }),
+        'queued'
+      )
+      reportTaskTransition(
+        task({
+          status: 'failed',
+          exitCode: 1,
+          startedAt: NOW.getTime(),
+          finishedAt: NOW.getTime(),
+          folderPath: dir,
+          backlogTaskId: 'task-race'
+        }),
+        'running'
+      )
+      await vi.waitFor(() => expect(order).toContain('start-write-began'))
+      // The still in-flight start write must be the only thing that has run —
+      // the finish write is queued behind it, not racing it.
+      expect(order).toEqual(['start-write-began'])
+      releaseStart()
+      await vi.waitFor(() => expect(order).toEqual(['start-write-began', 'start-write-done', 'finish-write-began']))
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('prunes its per-task entry once the chain drains, so a long-lived app does not leak one per task', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-prune-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    backlog.editBacklogTask.mockResolvedValue(undefined)
+    try {
+      reportTaskTransition(
+        task({ status: 'done', exitCode: 0, folderPath: dir, backlogTaskId: 'task-prune' }),
+        'running'
+      )
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(1))
+      // A second, unrelated transition on the same task+folder key runs to
+      // completion on its own rather than sitting queued forever behind a
+      // chain entry that should have been dropped.
+      backlog.editBacklogTask.mockClear()
+      reportTaskTransition(
+        task({
+          status: 'failed',
+          exitCode: 1,
+          folderPath: dir,
+          backlogTaskId: 'task-prune',
+          startedAt: NOW.getTime(),
+          finishedAt: NOW.getTime() + 1
+        }),
+        'done'
+      )
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(1))
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('reporting never blocks the synchronous call into saveTask', () => {
+  it('defers isBacklogRepo, the preset lookup, and CLI-touching work past an async boundary', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-defer-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    backlog.editBacklogTask.mockReset().mockResolvedValue(undefined)
+    try {
+      reportTaskTransition(
+        task({ status: 'done', exitCode: 0, folderPath: dir, backlogTaskId: 'task-defer' }),
+        'running'
+      )
+      // Still on the same synchronous stack as the call above: the guard that
+      // would otherwise do a synchronous existsSync hasn't run yet.
+      expect(backlog.isBacklogRepo).not.toHaveBeenCalled()
+      await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(1))
+      expect(backlog.isBacklogRepo).toHaveBeenCalledWith(dir)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('a missing CLI is a standing condition, not news', () => {
   it('warns once per run however many tasks report', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -194,6 +407,23 @@ describe('a missing CLI is a standing condition, not news', () => {
       reportTaskTransition(task({ id: 'b2c3', status: 'done', exitCode: 0, folderPath: dir }), 'running')
       await vi.waitFor(() => expect(backlog.editBacklogTask).toHaveBeenCalledTimes(2))
       expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('names the resolved CLI in the warning, not just the error message', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    backlog.editBacklogTask.mockReset()
+    backlog.editBacklogTask.mockRejectedValueOnce(new Error('Command failed: task edit task-42'))
+    backlog.describeResolvedBacklogCli.mockReturnValue('node C:/npm/backlog.md/cli.js')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superior-namedcli-'))
+    fs.mkdirSync(path.join(dir, 'backlog'), { recursive: true })
+    try {
+      reportTaskTransition(task({ status: 'done', exitCode: 0, folderPath: dir }), 'running')
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1))
+      expect(warn.mock.calls[0][0]).toContain('node C:/npm/backlog.md/cli.js')
     } finally {
       warn.mockRestore()
       fs.rmSync(dir, { recursive: true, force: true })

@@ -2,15 +2,26 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { editBacklogTask, isBacklogRepo, resetBacklogResolution } from './backlog.service'
+import {
+  describeResolvedBacklogCli,
+  editBacklogTask,
+  isBacklogRepo,
+  readBacklogTaskStatus,
+  resetBacklogResolution
+} from './backlog.service'
 
-/** A stand-in for the backlog CLI that records how it was called. */
+/**
+ * A stand-in for the backlog CLI that records how it was called. Writes
+ * FAKE_CLI_STDOUT to stdout when set, so readBacklogTaskStatus tests can feed
+ * it the shape of a real `--plain` reply without spawning the real CLI.
+ */
 const FAKE_CLI = `
 const fs = require('fs')
 fs.appendFileSync(process.env.FAKE_CLI_LOG, JSON.stringify({
   argv: process.argv.slice(2),
   cwd: process.cwd()
 }) + '\\n')
+if (process.env.FAKE_CLI_STDOUT) process.stdout.write(process.env.FAKE_CLI_STDOUT)
 process.exit(Number(process.env.FAKE_CLI_EXIT || '0'))
 `
 
@@ -31,6 +42,7 @@ describe('backlog.service', () => {
     process.env.SUPERIOR_BACKLOG_CLI = cliPath
     process.env.FAKE_CLI_LOG = logPath
     delete process.env.FAKE_CLI_EXIT
+    delete process.env.FAKE_CLI_STDOUT
     // The memo outlives a test but the temp CLI it points at does not, so every
     // test starts resolution over.
     resetBacklogResolution()
@@ -40,6 +52,7 @@ describe('backlog.service', () => {
     delete process.env.SUPERIOR_BACKLOG_CLI
     delete process.env.FAKE_CLI_LOG
     delete process.env.FAKE_CLI_EXIT
+    delete process.env.FAKE_CLI_STDOUT
     if (realPath === undefined) delete process.env.PATH
     else process.env.PATH = realPath
     if (realAppData === undefined) delete process.env.APPDATA
@@ -130,5 +143,87 @@ describe('backlog.service', () => {
     ).rejects.toThrow(/backlog CLI/i)
     // Nothing ran: a fall-through to a CLI on this machine would have logged a call.
     expect(fs.existsSync(logPath)).toBe(false)
+  })
+
+  describe('readBacklogTaskStatus', () => {
+    // Shapes verified against a real Backlog.md 1.52.0 repository — see
+    // backlog-report.service.ts's parseStatusLine comment for the full output.
+    it('parses the status text off the icon-prefixed Status line', async () => {
+      process.env.FAKE_CLI_STDOUT =
+        'Task TASK-1 - Probe task\n==========\n\nStatus: ✔ Done\nOrdinal: 1000\n'
+      const repo = path.join(dir, 'repo7')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await expect(readBacklogTaskStatus(repo, 'task-1')).resolves.toBe('Done')
+    })
+
+    it('parses a two-word status the same way', async () => {
+      process.env.FAKE_CLI_STDOUT = 'Task TASK-1 - Probe task\n==========\n\nStatus: ◒ In Progress\n'
+      const repo = path.join(dir, 'repo8')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await expect(readBacklogTaskStatus(repo, 'task-1')).resolves.toBe('In Progress')
+    })
+
+    it('resolves null rather than rejecting when the task does not exist', async () => {
+      process.env.FAKE_CLI_EXIT = '1'
+      process.env.FAKE_CLI_STDOUT = ''
+      const repo = path.join(dir, 'repo9')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await expect(readBacklogTaskStatus(repo, 'task-999')).resolves.toBeNull()
+    })
+
+    it('resolves null when no CLI can be found, rather than rejecting', async () => {
+      process.env.SUPERIOR_BACKLOG_CLI = path.join(dir, 'does-not-exist.js')
+      resetBacklogResolution()
+      const repo = path.join(dir, 'repo10')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await expect(readBacklogTaskStatus(repo, 'task-1')).resolves.toBeNull()
+    })
+
+    it('resolves null when the output has no parseable Status line', async () => {
+      process.env.FAKE_CLI_STDOUT = 'Task 999 not found.\n'
+      const repo = path.join(dir, 'repo11')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await expect(readBacklogTaskStatus(repo, 'task-1')).resolves.toBeNull()
+    })
+
+    it('runs with the id and --plain as separate argv entries', async () => {
+      process.env.FAKE_CLI_STDOUT = 'Status: ○ To Do\n'
+      const repo = path.join(dir, 'repo12')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await readBacklogTaskStatus(repo, 'task-42')
+
+      expect(calls()[0].argv).toEqual(['task', 'task-42', '--plain'])
+    })
+  })
+
+  describe('describeResolvedBacklogCli', () => {
+    it('is null before any resolution has happened', () => {
+      expect(describeResolvedBacklogCli()).toBeNull()
+    })
+
+    it('names the CLI a successful resolution found', async () => {
+      const repo = path.join(dir, 'repo13')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await editBacklogTask({ repoPath: repo, taskId: 'task-1', status: 'Done' })
+
+      expect(describeResolvedBacklogCli()).toContain(cliPath)
+    })
+
+    it('stays null when the only resolution attempt found nothing', async () => {
+      process.env.SUPERIOR_BACKLOG_CLI = path.join(dir, 'does-not-exist.js')
+      resetBacklogResolution()
+      const repo = path.join(dir, 'repo14')
+      fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+      await expect(editBacklogTask({ repoPath: repo, taskId: 'task-1', status: 'Done' })).rejects.toThrow()
+      expect(describeResolvedBacklogCli()).toBeNull()
+    })
   })
 })
