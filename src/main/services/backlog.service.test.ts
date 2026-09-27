@@ -109,12 +109,7 @@ describe('backlog.service', () => {
   })
 
   it('rejects when no CLI can be found', async () => {
-    // This machine really does have backlog on PATH, so an override pointing at
-    // nothing is not enough — resolution would simply find the real one and the
-    // test would pass for the wrong reason. Take away every place it looks.
     process.env.SUPERIOR_BACKLOG_CLI = path.join(dir, 'does-not-exist.js')
-    process.env.PATH = ''
-    delete process.env.APPDATA
     resetBacklogResolution()
     const repo = path.join(dir, 'repo5')
     fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
@@ -122,5 +117,18 @@ describe('backlog.service', () => {
     await expect(
       editBacklogTask({ repoPath: repo, taskId: 'task-1', status: 'Done' })
     ).rejects.toThrow(/backlog CLI/i)
+  })
+
+  it('treats an explicit override as the only candidate, never falling through to a real CLI', async () => {
+    process.env.SUPERIOR_BACKLOG_CLI = path.join(dir, 'not-installed.js')
+    resetBacklogResolution()
+    const repo = path.join(dir, 'repo6')
+    fs.mkdirSync(path.join(repo, 'backlog'), { recursive: true })
+
+    await expect(
+      editBacklogTask({ repoPath: repo, taskId: 'task-1', status: 'Done' })
+    ).rejects.toThrow(/backlog CLI/i)
+    // Nothing ran: a fall-through to a CLI on this machine would have logged a call.
+    expect(fs.existsSync(logPath)).toBe(false)
   })
 })

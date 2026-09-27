@@ -46,22 +46,26 @@ export function isBacklogRepo(folderPath: string): boolean {
  * current binary instead. That keeps shell:false everywhere.
  */
 function resolve(): BacklogCommand {
+  // An explicit override is authoritative: if someone names a CLI, resolution
+  // uses that one or fails. Falling through to a different CLI on the machine
+  // would be a worse outcome than a clear error, and it is what makes the
+  // "no CLI can be found" case testable at all.
+  const override = process.env.SUPERIOR_BACKLOG_CLI
   const candidates: string[] = []
+  if (override) {
+    candidates.push(override)
+  } else {
+    if (process.env.APPDATA) {
+      candidates.push(path.join(process.env.APPDATA, 'npm', 'node_modules', 'backlog.md', 'cli.js'))
+    }
+    candidates.push('/usr/local/lib/node_modules/backlog.md/cli.js')
+    candidates.push('/usr/lib/node_modules/backlog.md/cli.js')
 
-  // An explicit override, for a CLI installed somewhere unusual — and the seam
-  // the tests use.
-  if (process.env.SUPERIOR_BACKLOG_CLI) candidates.push(process.env.SUPERIOR_BACKLOG_CLI)
-
-  if (process.env.APPDATA) {
-    candidates.push(path.join(process.env.APPDATA, 'npm', 'node_modules', 'backlog.md', 'cli.js'))
-  }
-  candidates.push('/usr/local/lib/node_modules/backlog.md/cli.js')
-  candidates.push('/usr/lib/node_modules/backlog.md/cli.js')
-
-  const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : ['']
-  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
-    if (!dir) continue
-    for (const ext of exts) candidates.push(path.join(dir, `backlog${ext}`))
+    const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : ['']
+    for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+      if (!dir) continue
+      for (const ext of exts) candidates.push(path.join(dir, `backlog${ext}`))
+    }
   }
 
   for (const candidate of candidates) {
