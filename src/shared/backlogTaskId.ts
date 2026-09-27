@@ -8,8 +8,13 @@
  * The `task-` prefix is required. Bare numbers appear in prose constantly and
  * treating them as references would link runs to tasks at random. Ids can be
  * nested (`task-5.1`), which the Backlog CLI accepts as-is.
+ *
+ * Two negative lookaheads ensure the id doesn't run into adjacent characters:
+ * `(?!\w)` rejects a word character immediately after the id (e.g., `task-42abc`),
+ * and `(?!\.\d)` rejects a dot-digit sequence that would extend a nested id
+ * (e.g., `task-5.1abc` backtracking to match `task-5` followed by `.1abc`).
  */
-const TASK_REFERENCE = /\btask-(\d+(?:\.\d+)*)\b/i
+const TASK_REFERENCE = /\btask-(\d+(?:\.\d+)*)(?!\w)(?!\.\d)/i
 
 /**
  * The first Backlog task id mentioned in `prompt`, lowercased so the CLI always

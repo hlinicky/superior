@@ -37,4 +37,20 @@ describe('parseBacklogTaskId', () => {
   it('returns undefined for an empty prompt', () => {
     expect(parseBacklogTaskId('')).toBeUndefined()
   })
+
+  it('does not match a nested id that runs into other characters', () => {
+    expect(parseBacklogTaskId('the task-5.1abc branch')).toBeUndefined()
+  })
+
+  it('does not match a deeper nested id that runs into other characters', () => {
+    expect(parseBacklogTaskId('task-5.1.2x')).toBeUndefined()
+  })
+
+  it('still matches an id ending a sentence', () => {
+    expect(parseBacklogTaskId('please fix task-5.')).toBe('task-5')
+  })
+
+  it('still matches a nested id followed by punctuation', () => {
+    expect(parseBacklogTaskId('task-5.1, then ship')).toBe('task-5.1')
+  })
 })
