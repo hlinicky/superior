@@ -189,6 +189,17 @@ export function StarIcon(props: IconProps): React.JSX.Element {
   )
 }
 
+/** Sliders: sort / view options. */
+export function SlidersIcon(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props, 1.7)}>
+      <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="10" cy="17" r="2" />
+    </svg>
+  )
+}
+
 export function CheckIcon(props: IconProps): React.JSX.Element {
   return (
     <svg {...base(props, 2.2)}>

@@ -1,7 +1,8 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { IPC } from '@shared/types'
 import { getSettings } from '../services/settings.service'
-import { handleWithEvent } from './handle'
+import { isProcessElevated } from '../services/elevation.service'
+import { handle, handleWithEvent } from './handle'
 
 /**
  * Register the global window-control handlers once. Each handler resolves the
@@ -22,6 +23,8 @@ export function registerWindowIpc(): void {
   ipcMain.on(IPC.WINDOW_CLOSE, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()
   })
+
+  handle(IPC.APP_IS_ELEVATED, (): Promise<boolean> => isProcessElevated())
 
   handleWithEvent(IPC.WINDOW_IS_MAXIMIZED, (event): boolean => {
     return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false

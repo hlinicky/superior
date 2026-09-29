@@ -1,10 +1,12 @@
 import { setupHu } from '../worktreeSetup'
 import { terminalSettingsHu } from '../terminalSettings'
 import { onboardingHu } from '../onboarding'
+import { elevationHu } from '../elevation'
 import type { MessageKey } from './en'
 
 export const hu: Record<MessageKey, string> = {
   ...setupHu,
+  ...elevationHu,
   ...terminalSettingsHu,
   'browser.navigation': "Böngésző navigáció",
   'browser.back': "Vissza",
@@ -62,6 +64,11 @@ export const hu: Record<MessageKey, string> = {
   'pane.top': '↑ Felül',
   'pane.bottom': '↓ Alul',
   'sidebar.openProject': 'Projekt megnyitása / klónozása',
+  'sidebar.sortBy': "Workspace-ek rendezése",
+  'sidebar.sortRecent': "Legutóbbi aktivitás",
+  'sidebar.sortSmart': "Smart",
+  'sidebar.sortName': "Név",
+  'sidebar.sortManual': "Kézi",
   'sidebar.noWorkspaces': 'Még nincs mappa — nyiss meg egyet.',
   'sidebar.removeFromList': 'Eltávolítás a listából',
   'sidebar.addWorkspace': 'Munkaterület hozzáadása',
@@ -73,8 +80,6 @@ export const hu: Record<MessageKey, string> = {
   'sidebar.removeFolder': 'Mappa eltávolítása',
   'sidebar.removeFolderConfirm':
     'Eltávolítod „{name}” mappát a listáról? A workspace-ei bezárulnak, a futó terminálok leállnak. A lemezen lévő fájlok érintetlenek maradnak.',
-  'menu.folderActions': 'Mappaműveletek',
-  'menu.workspaceActions': 'Workspace-műveletek',
   'grid.dividerHint': 'Húzd a méretezéshez · Alt-tal szabadon',
   'profile.label': 'Profil',
   'profile.switch': 'Profil váltása',
@@ -215,6 +220,9 @@ export const hu: Record<MessageKey, string> = {
   'keyboard.globalHotkeyUnset': 'Nincs beállítva',
   'palette.placeholder': 'Írj be egy parancsot…',
   'palette.noResults': 'Nincs találat',
+  'palette.open': "Megnyitás",
+  'palette.close': "Bezárás",
+  'palette.move': "Mozgás",
   'palette.sectionWorkspaces': 'Workspace-ek',
   'palette.sectionProfiles': 'Profilok',
   'palette.sectionTerminals': 'Terminálok',
@@ -227,6 +235,8 @@ export const hu: Record<MessageKey, string> = {
   'search.close': 'Keresés bezárása',
   'notify.setting': 'Értesítések',
   'notify.settingDesc': 'Értesítés, ha a terminál figyelmet kér vagy a folyamata leáll, miközben az alkalmazás a háttérben van.',
+  'agentHooks.setting': "Pontos Claude állapot",
+  'agentHooks.settingDesc': "Hookokat ad a Claude settings.json fájljához, így a terminálok pontosan mutatják, mikor dolgozik, mikor vár engedélyre vagy mikor végzett. Az újonnan indított munkamenetekre vonatkozik.",
   'notify.finishedTitle': '{label} figyelmet igényel',
   'notify.finishedBody': 'Ellenőrizze a terminált a(z) {workspace} workspace-ben.',
   'keyboard.recording': 'Nyomjon billentyűket…',

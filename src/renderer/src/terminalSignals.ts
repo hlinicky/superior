@@ -4,14 +4,18 @@
  * and OSC 777 are used by agent CLIs for desktop notifications. Other OSCs
  * (especially Windows OSC 9;4 progress updates) must not become notifications.
  * State spans PTY chunks; control-string payloads are bounded and never executed.
+ * Window titles (OSC 0/2) are reported separately; agents animate them while working.
  */
 export class TerminalSignals {
   private state: 'text' | 'escape' | 'osc' | 'oscEscape' | 'string' | 'stringEscape' = 'text'
   private payload = ''
   private overflow = false
 
+  constructor(private readonly onTitle?: (title: string) => void) {}
+
   private endOsc(): boolean {
     const text = this.payload
+    if (!this.overflow && /^[02];/.test(text)) this.onTitle?.(text.slice(2))
     const valid = !this.overflow && (
       (text.startsWith('9;') && text.length > 2 && !/^9;\d+(?:;|$)/.test(text)) ||
       (text.startsWith('777;notify;') && text.length > 11)

@@ -37,6 +37,15 @@ export interface DirectSpawn {
   args: string[]
 }
 
+/** Who the daemon is: lets the app tell a relocated host from one that locks the install dir. */
+export interface DaemonInfo {
+  pid: number
+  /** The executable the daemon runs from (a relocated copy or the installed app). */
+  execPath: string
+  /** App version that spawned the daemon; absent when the spawner passed none. */
+  version?: string
+}
+
 /** Messages a client (the Electron main process) sends to the daemon. */
 export type ClientMessage =
   | { t: 'hello' }
@@ -51,6 +60,8 @@ export type ClientMessage =
       cols: number
       rows: number
       meta: DaemonSessionMeta
+      /** Extra SUPERIOR_* variables for the terminal. Older daemons ignore it. */
+      env?: Record<string, string>
     }
   | { t: 'attach'; id: string }
   | { t: 'detach'; id: string }
@@ -67,6 +78,8 @@ export type ServerMessage =
   | { t: 'spawned'; id: string; pid?: number }
   | { t: 'killed'; id: string; requestId: string }
   | { t: 'error'; message: string; id?: string }
+  /** Reply to `hello`. Daemons from older builds never send it. */
+  | ({ t: 'info' } & DaemonInfo)
 
 /** Default socket / pipe path for the daemon. */
 export function daemonSocketPath(userData: string): string {

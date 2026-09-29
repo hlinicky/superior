@@ -1,10 +1,12 @@
 import { setupSk } from '../worktreeSetup'
 import { terminalSettingsSk } from '../terminalSettings'
 import { onboardingSk } from '../onboarding'
+import { elevationSk } from '../elevation'
 import type { MessageKey } from './en'
 
 export const sk: Record<MessageKey, string> = {
   ...setupSk,
+  ...elevationSk,
   ...terminalSettingsSk,
   'browser.navigation': "Navigácia prehliadača",
   'browser.back': "Späť",
@@ -62,6 +64,11 @@ export const sk: Record<MessageKey, string> = {
   'pane.top': '↑ Hore',
   'pane.bottom': '↓ Dole',
   'sidebar.openProject': 'Otvoriť / klonovať projekt',
+  'sidebar.sortBy': "Triediť workspaces",
+  'sidebar.sortRecent': "Posledná aktivita",
+  'sidebar.sortSmart': "Smart",
+  'sidebar.sortName': "Názov",
+  'sidebar.sortManual': "Ručne",
   'sidebar.noWorkspaces': 'Zatiaľ žiadne priečinky — otvorte jeden.',
   'sidebar.removeFromList': 'Odstrániť zo zoznamu',
   'sidebar.addWorkspace': 'Pridať workspace',
@@ -73,8 +80,6 @@ export const sk: Record<MessageKey, string> = {
   'sidebar.removeFolder': 'Odstrániť priečinok',
   'sidebar.removeFolderConfirm':
     'Odstrániť „{name}“ zo zoznamu? Jeho workspaces sa zatvoria a bežiace terminály zastavia. Súbory na disku ostanú nedotknuté.',
-  'menu.folderActions': 'Akcie priečinka',
-  'menu.workspaceActions': 'Akcie workspace',
   'grid.dividerHint': 'Ťahom zmeníte veľkosť · s Alt voľne',
   'profile.label': 'Profil',
   'profile.switch': 'Prepnúť profil',
@@ -215,6 +220,9 @@ export const sk: Record<MessageKey, string> = {
   'keyboard.globalHotkeyUnset': 'Nenastavené',
   'palette.placeholder': 'Napíš príkaz…',
   'palette.noResults': 'Žiadne zodpovedajúce príkazy',
+  'palette.open': "Otvoriť",
+  'palette.close': "Zavrieť",
+  'palette.move': "Posun",
   'palette.sectionWorkspaces': 'Workspaces',
   'palette.sectionProfiles': 'Profily',
   'palette.sectionTerminals': 'Terminály',
@@ -227,6 +235,8 @@ export const sk: Record<MessageKey, string> = {
   'search.close': 'Zavrieť hľadanie',
   'notify.setting': 'Notifikácie',
   'notify.settingDesc': 'Upozorniť, keď terminál vyžiada pozornosť alebo jeho proces skončí a aplikácia je na pozadí.',
+  'agentHooks.setting': "Presný stav Claude",
+  'agentHooks.settingDesc': "Pridá hooky do settings.json Claude, takže terminály presne ukážu, kedy Claude pracuje, čaká na povolenie alebo skončil. Platí pre novo spustené session.",
   'notify.finishedTitle': '{label} vyžaduje pozornosť',
   'notify.finishedBody': 'Skontrolujte terminál vo workspace {workspace}.',
   'keyboard.recording': 'Stlačte klávesy…',

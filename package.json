@@ -1,6 +1,6 @@
 {
   "name": "superior",
-  "version": "0.28.0",
+  "version": "0.30.0",
   "description": "Minimal desktop core: open a folder and run agent CLIs in an embedded terminal.",
   "main": "out/main/index.js",
   "desktopName": "superior.desktop",

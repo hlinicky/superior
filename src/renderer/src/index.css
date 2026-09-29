@@ -6,45 +6,6 @@
   filter: invert(1);
 }
 
-/* Connect each visible workspace/worktree to its project header. */
-.sidebar-workspace-tree > li {
-  position: relative;
-}
-
-.sidebar-workspace-tree > li::before,
-.sidebar-workspace-tree > li::after {
-  content: '';
-  position: absolute;
-  left: 16px;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--c-fgmuted) 45%, transparent);
-}
-
-.sidebar-workspace-tree > li::before {
-  top: -2px;
-  bottom: 0;
-  width: 1px;
-}
-
-.sidebar-workspace-tree > li:first-child::before {
-  top: -4px;
-}
-
-.sidebar-workspace-tree > li:last-child::before {
-  bottom: 50%;
-}
-
-.sidebar-workspace-tree > li::after {
-  top: 50%;
-  width: 12px;
-  height: 1px;
-}
-
-.sidebar-workspace-tree > li > [role='button'] {
-  margin-left: 28px;
-  padding-left: 4px;
-}
-
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still

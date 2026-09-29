@@ -2,6 +2,7 @@ import type { WorktreeSetupConfig, WorktreeSetupSnapshot } from './worktree-setu
 import type { TerminalSettings } from './terminalSettings'
 import { BROWSER_IPC, type BrowserRequest, type BrowserState, type BrowserDesignRequest } from './browser'
 import { IPC } from './types'
+import type { AgentStateEvent } from './agent-state'
 import type {
   SendReviewArgs,
   AgentTask,
@@ -177,6 +178,7 @@ export interface IpcInvokeMap {
   [IPC.SETTINGS_SET_USAGE_TRACKING]: Invocation<[enabled: boolean], AppSettings>
   [IPC.SETTINGS_SET_USAGE_PRIMARY]: Invocation<[primary: UsagePrimary], AppSettings>
   [IPC.SETTINGS_SET_NOTIFICATIONS]: Invocation<[enabled: boolean], AppSettings>
+  [IPC.SETTINGS_SET_AGENT_HOOKS]: Invocation<[enabled: boolean], AppSettings>
   [IPC.SETTINGS_SET_GLOBAL_HOTKEY]: Invocation<[chord: string | null], GlobalHotkeyResult>
 
   [IPC.UPDATE_CHECK]: Invocation<[], UpdateInfo>
@@ -223,6 +225,7 @@ export interface IpcInvokeMap {
   [IPC.TASKS_SET_PAUSED]: Invocation<[paused: boolean], TasksState>
 
   [IPC.WINDOW_IS_MAXIMIZED]: Invocation<[], boolean>
+  [IPC.APP_IS_ELEVATED]: Invocation<[], boolean>
   [IPC.AGENT_START]: Invocation<[args: StartAgentArgs], StartAgentResult>
   [IPC.AGENT_REVIEW]: Invocation<[SendReviewArgs], void>
   [BROWSER_IPC.REQUEST]: Invocation<[BrowserRequest], BrowserState | null>
@@ -231,6 +234,7 @@ export interface IpcInvokeMap {
   [IPC.AGENT_UPDATE_META]: Invocation<[args: { id: string; nickname: string }], void>
   [IPC.AGENT_KILL]: Invocation<[id: string], void>
   [IPC.AGENT_USAGE_GET]: Invocation<[], AgentUsage[]>
+  [IPC.AGENT_STATES_GET]: Invocation<[], AgentStateEvent[]>
   [IPC.USAGE_PROFILES]: Invocation<[], UsageProfile[]>
   [IPC.USAGE_ACCOUNTS]: Invocation<[ids: string[], force: boolean], AccountUsage[]>
   [IPC.USAGE_RESET]: Invocation<[request: UsageResetRequest], UsageResetOutcome>

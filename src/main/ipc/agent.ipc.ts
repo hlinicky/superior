@@ -18,6 +18,7 @@ import { daemonClient } from '../services/daemonClient'
 import { getUsageSnapshots } from '../services/usage.service'
 import { consumeUsageReset, getAccountUsage, listUsageProfiles } from '../services/account-usage.service'
 import { handle } from './handle'
+import { getAgentStates } from '../services/agent-state.service'
 import { isStartAgentArgs, validId } from './validation'
 
 export function registerAgentIpc(): void {
@@ -38,6 +39,8 @@ export function registerAgentIpc(): void {
   handle(IPC.AGENT_RESTORE, (): Promise<AgentSession[]> => restoreSessions())
 
   handle(IPC.AGENT_USAGE_GET, (): AgentUsage[] => getUsageSnapshots())
+
+  handle(IPC.AGENT_STATES_GET, () => getAgentStates())
 
   handle(IPC.AGENT_KILL, (id: string): Promise<void> => {
     if (!validId(id)) return Promise.reject(new Error('Invalid terminal session id.'))

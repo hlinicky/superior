@@ -3,6 +3,7 @@ import { nextWorkspaceMode } from './codeWorkspace'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { UsageFooter } from './components/UsageFooter'
+import { ElevationNotice } from './components/ElevationNotice'
 import { Sidebar } from './components/Sidebar'
 import { TerminalPanel } from './components/TerminalPanel'
 import type { SettingsSection } from './components/SettingsView'
@@ -83,10 +84,13 @@ export default function App(): React.JSX.Element {
   const toast = useToast()
   const [onboarding, setOnboarding] = useState<'first-run' | 'replay' | null>(null)
   const [usageRevision, setUsageRevision] = useState(0)
+  const [elevationNotice, setElevationNotice] = useState(false)
   useEffect(() => {
     let live = true
     void window.api.getSettings().then((settings) => {
       if (live && settings.ui.onboardingCompleted === false) setOnboarding('first-run')
+      if (window.api.platform !== 'win32' || settings.ui.elevationWarningDismissed) return
+      return window.api.isElevated().then((elevated) => { if (live && elevated) setElevationNotice(true) })
     }).catch((err: unknown) => { if (live) toast.error(String(err)) })
     return () => { live = false }
   }, [toast])
@@ -995,6 +999,15 @@ export default function App(): React.JSX.Element {
       </div>
 
       <UsageFooter key={usageRevision} onManage={openPresets} />
+      {elevationNotice && !onboarding && (
+        <ElevationNotice
+          onClose={() => setElevationNotice(false)}
+          onNever={() => {
+            setElevationNotice(false)
+            window.api.setUiState({ elevationWarningDismissed: true }).catch((err: unknown) => toast.error(String(err)))
+          }}
+        />
+      )}
       {onboarding && (
         <Suspense fallback={<DeferredPanel />}>
           <Onboarding

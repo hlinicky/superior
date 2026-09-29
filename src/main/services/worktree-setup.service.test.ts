@@ -94,7 +94,7 @@ describe('worktree preparation', () => {
   })
 
   it('bounds retained output', async () => {
-    saveSetupConfig(workspace.folderPath, { commands: [command('console.log("x".repeat(100000));console.error("tail")')], copyFiles: [] })
+    saveSetupConfig(workspace.folderPath, { commands: [command('console.log("x".repeat(100000));console.log("tail")')], copyFiles: [] })
     await runSetup(workspace)
     expect(getSetupState(workspace)?.output.length).toBeLessThanOrEqual(64_000)
     expect(getSetupState(workspace)?.output).toContain('tail')

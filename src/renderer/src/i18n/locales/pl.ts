@@ -1,10 +1,12 @@
 import { setupPl } from '../worktreeSetup'
 import { terminalSettingsPl } from '../terminalSettings'
 import { onboardingPl } from '../onboarding'
+import { elevationPl } from '../elevation'
 import type { MessageKey } from './en'
 
 export const pl: Record<MessageKey, string> = {
   ...setupPl,
+  ...elevationPl,
   ...terminalSettingsPl,
   'browser.navigation': "Nawigacja przeglądarki",
   'browser.back': "Wstecz",
@@ -62,6 +64,11 @@ export const pl: Record<MessageKey, string> = {
   'pane.top': '↑ Na górze',
   'pane.bottom': '↓ Na dole',
   'sidebar.openProject': 'Otwórz / sklonuj projekt',
+  'sidebar.sortBy': "Sortuj workspace",
+  'sidebar.sortRecent': "Ostatnia aktywność",
+  'sidebar.sortSmart': "Smart",
+  'sidebar.sortName': "Nazwa",
+  'sidebar.sortManual': "Ręcznie",
   'sidebar.noWorkspaces': 'Brak folderów — otwórz jeden.',
   'sidebar.removeFromList': 'Usuń z listy',
   'sidebar.addWorkspace': 'Dodaj workspace',
@@ -73,8 +80,6 @@ export const pl: Record<MessageKey, string> = {
   'sidebar.removeFolder': 'Usuń folder',
   'sidebar.removeFolderConfirm':
     'Usunąć „{name}” z listy? Jego workspaces zostaną zamknięte, a działające terminale zatrzymane. Pliki na dysku pozostaną nietknięte.',
-  'menu.folderActions': 'Akcje folderu',
-  'menu.workspaceActions': 'Akcje workspace',
   'grid.dividerHint': 'Przeciągnij, aby zmienić rozmiar · z Alt swobodnie',
   'profile.label': 'Profil',
   'profile.switch': 'Przełącz profil',
@@ -215,6 +220,9 @@ export const pl: Record<MessageKey, string> = {
   'keyboard.globalHotkeyUnset': 'Nie ustawiono',
   'palette.placeholder': 'Wpisz polecenie…',
   'palette.noResults': 'Brak pasujących poleceń',
+  'palette.open': "Otwórz",
+  'palette.close': "Zamknij",
+  'palette.move': "Przejdź",
   'palette.sectionWorkspaces': 'Workspaces',
   'palette.sectionProfiles': 'Profile',
   'palette.sectionTerminals': 'Terminale',
@@ -227,6 +235,8 @@ export const pl: Record<MessageKey, string> = {
   'search.close': 'Zamknij wyszukiwanie',
   'notify.setting': 'Powiadomienia',
   'notify.settingDesc': 'Powiadom, gdy terminal wymaga uwagi lub jego proces zakończy się, a aplikacja jest w tle.',
+  'agentHooks.setting': "Dokładny stan Claude",
+  'agentHooks.settingDesc': "Dodaje hooki do settings.json Claude, dzięki czemu terminale dokładnie pokazują, kiedy Claude pracuje, czeka na zgodę lub kończy. Dotyczy nowo uruchomionych sesji.",
   'notify.finishedTitle': '{label} wymaga uwagi',
   'notify.finishedBody': 'Sprawdź terminal w workspace {workspace}.',
   'keyboard.recording': 'Naciśnij klawisze…',

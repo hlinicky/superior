@@ -28,6 +28,9 @@ import { isUpdatePending, releaseDaemonForUpdate } from './services/update.servi
 import { daemonClient } from './services/daemonClient'
 import { setTaskTransitionListener } from './services/tasks.service'
 import { reportTaskTransition } from './services/backlog-report.service'
+import { prepareDaemonHost } from './services/daemonHost'
+import { forgetAgentState, startAgentStateWatcher } from './services/agent-state.service'
+import { ensureClaudeStateHooks } from './services/claude-hooks.service'
 
 const isMac = process.platform === 'darwin'
 
@@ -147,6 +150,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   // Windows needs an explicit AppUserModelID for native notifications to show.
   if (process.platform === 'win32') app.setAppUserModelId('com.superior.app')
 
+  // Windows: copy the daemon host out of the install dir in the background, so
+  // terminals survive updates (no-op elsewhere; see daemonHost.ts).
+  prepareDaemonHost()
+
   // A folder passed on the command line (`superior /some/dir`). Persist it before
   // the window loads so the renderer's initial state read already includes it and
   // opens it active. Restrict cold-start parsing to the explicit `--path` flag in
@@ -190,6 +197,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   registerClipboardIpc()
   registerCliLauncherIpc()
 
+  // Hook-reported agent state; plain `claude` typed into a shell uses ~/.claude.
+  startAgentStateWatcher()
+  daemonClient.onExit(({ id }) => forgetAgentState(id))
+  if (getSettings().agentHooks) ensureClaudeStateHooks('claude')
+
   // Connect to (or launch) the terminal daemon so surviving sessions can be restored.
   daemonClient.ensure().catch((err) => console.error('[daemon] connect failed:', err))
 
@@ -227,10 +239,11 @@ app.on('before-quit', (event) => {
     void stopAllSetups().finally(() => { setupsStopped = true; app.quit() })
     return
   }
-  // A staged update installs on quit; on Windows the daemon runs the app's own
-  // executable and would keep the installer from replacing it. Take the daemon
-  // down first, then let the quit resume (isUpdatePending() flips off once the
-  // daemon is released, so the re-fired before-quit falls through).
+  // A staged update installs on quit; on Windows a daemon running from the
+  // install dir would keep the installer from replacing the exe. Take such a
+  // daemon down first (a relocated one keeps running), then let the quit resume
+  // (isUpdatePending() flips off once checked, so the re-fired before-quit
+  // falls through).
   if (isUpdatePending()) {
     event.preventDefault()
     void releaseDaemonForUpdate().finally(() => app.quit())

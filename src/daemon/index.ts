@@ -14,9 +14,10 @@ import {
 import { RingBuffer } from './ringBuffer'
 import { BoundedLog } from './boundedLog'
 
-// argv: [node, daemonEntry, socketPath, logPath]
+// argv: [node, daemonEntry, socketPath, logPath, appVersion?]
 const socketPath = process.argv[2]
 const logPath = process.argv[3]
+const appVersion = process.argv[4] || undefined
 
 const SCROLLBACK_BYTES = 1_500_000
 const SHUTDOWN_GRACE_MS = 45_000
@@ -117,7 +118,7 @@ function flush(session: Session): void {
 }
 
 /** Clean env for spawned ptys — never leak Electron-as-Node flags to children. */
-function ptyEnv(): Record<string, string> {
+function ptyEnv(extra: unknown): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue
@@ -129,6 +130,12 @@ function ptyEnv(): Record<string, string> {
   // (xterm.js renders all of these) so CLIs emit full colour.
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
+  // Per-terminal hook routing from the app; only SUPERIOR_* names are accepted.
+  if (extra && typeof extra === 'object') {
+    for (const [k, v] of Object.entries(extra)) {
+      if (/^SUPERIOR_[A-Z_]+$/.test(k) && typeof v === 'string') env[k] = v
+    }
+  }
   return env
 }
 
@@ -155,6 +162,27 @@ function resolveShell(command: string): { shell: string; shellArgs: string[] } {
   return { shell, shellArgs: hasCommand ? ['-l', '-c', command] : ['-l', '-i'] }
 }
 
+// Bundled ConPTY (conpty.dll + OpenConsole.exe shipped by node-pty) instead of
+// the OS copy: newer, and not tied to the Windows build's conhost bugs. Stays
+// off for the daemon's lifetime once a spawn proves the bundled files missing.
+let useConptyDll = process.platform === 'win32'
+
+function spawnPty(file: string, args: string[], options: pty.IWindowsPtyForkOptions): pty.IPty {
+  if (useConptyDll) {
+    try {
+      return pty.spawn(file, args, { ...options, useConptyDll: true })
+    } catch (err) {
+      // A bad cwd or command fails either way; only a system-ConPTY success
+      // proves the bundled files are the problem.
+      const proc = pty.spawn(file, args, options)
+      useConptyDll = false
+      log(`bundled ConPTY unavailable, using the system one: ${(err as Error).message}`)
+      return proc
+    }
+  }
+  return pty.spawn(file, args, options)
+}
+
 function spawnSession(
   id: string,
   command: string,
@@ -162,19 +190,20 @@ function spawnSession(
   cwd: string,
   cols: number,
   rows: number,
-  meta: DaemonSessionMeta
+  meta: DaemonSessionMeta,
+  extraEnv?: Record<string, string>
 ): void {
   if (sessions.has(id)) return
   const resolved = direct ?? (() => {
     const { shell, shellArgs } = resolveShell(command)
     return { executable: shell, args: shellArgs }
   })()
-  const proc = pty.spawn(resolved.executable, resolved.args, {
+  const proc = spawnPty(resolved.executable, resolved.args, {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
     cwd,
-    env: ptyEnv()
+    env: ptyEnv(extraEnv)
   })
 
   const session: Session = {
@@ -206,6 +235,9 @@ function spawnSession(
     // nobody hears leaves the app showing a running session forever.
     for (const conn of clients) send(conn, { t: 'exit', id, exitCode, signal })
     sessions.delete(id)
+    // Without this a log can't tell "the ptys died, then the daemon idled out"
+    // from "something killed the daemon".
+    log(`exited ${id} code=${exitCode}${signal ? ` signal=${signal}` : ''} remaining=${sessions.size}`)
     scheduleShutdownCheck()
   })
 
@@ -227,6 +259,7 @@ function handle(conn: Conn, msg: ClientMessage): void {
   switch (msg.t) {
     case 'hello':
       cancelShutdown()
+      send(conn, { t: 'info', pid: process.pid, execPath: process.execPath, version: appVersion })
       break
     case 'list':
       send(conn, { t: 'sessions', list: listSessions() })
@@ -250,7 +283,7 @@ function handle(conn: Conn, msg: ClientMessage): void {
     case 'spawn':
       cancelShutdown()
       try {
-        spawnSession(msg.id, msg.command, msg.direct, msg.cwd, msg.cols, msg.rows, msg.meta)
+        spawnSession(msg.id, msg.command, msg.direct, msg.cwd, msg.cols, msg.rows, msg.meta, msg.env)
         send(conn, { t: 'spawned', id: msg.id, pid: sessions.get(msg.id)?.proc.pid })
       } catch (err) {
         send(conn, { t: 'error', id: msg.id, message: (err as Error).message || 'spawn failed' })
@@ -441,12 +474,14 @@ function start(): void {
     process.exit(1)
   })
 
-  server.listen(socketPath, () => log(`listening on ${socketPath}`))
+  server.listen(socketPath, () =>
+    log(`listening on ${socketPath} pid=${process.pid} exec=${process.execPath} version=${appVersion ?? '?'}`))
 }
 
 // A daemon crash kills every pty — survive non-fatal errors.
 process.on('uncaughtException', (err) => log(`uncaughtException: ${err.stack ?? err}`))
 process.on('unhandledRejection', (reason) => log(`unhandledRejection: ${reason}`))
+process.on('exit', (code) => log(`exit code=${code} sessions=${sessions.size}`))
 process.on('SIGHUP', () => {
   /* ignore — outliving the app is the whole point */
 })

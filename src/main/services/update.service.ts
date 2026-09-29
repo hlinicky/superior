@@ -2,6 +2,7 @@ import { app, BrowserWindow, net, shell } from 'electron'
 import electronUpdater from 'electron-updater'
 import { IPC, type UpdateInfo, type UpdateProgress } from '@shared/types'
 import { shutdownDaemon } from './daemonClient'
+import { daemonLocksInstall } from './daemonHost'
 
 const { autoUpdater } = electronUpdater
 
@@ -10,16 +11,19 @@ const { autoUpdater } = electronUpdater
 let updateStaged = false
 let daemonReleased = false
 
-/** True while a downloaded Windows update still needs the daemon brought down
- *  before it can install (the daemon holds a lock on the app executable). */
+/** True while a downloaded Windows update has not yet checked whether the
+ *  daemon must be brought down (it may hold a lock on the app executable). */
 export function isUpdatePending(): boolean {
   return process.platform === 'win32' && updateStaged && !daemonReleased
 }
 
 /**
- * On Windows, bring the daemon down so its copy of the app executable stops
- * locking the file the installer replaces. Idempotent — safe to call from both
- * the explicit "restart to install" action and the app-quit auto-install path.
+ * On Windows, bring the daemon down only when it runs from the install dir, so
+ * its copy of the app executable stops locking the file the installer replaces.
+ * A daemon on the relocated host (daemonHost.ts) sits outside the installer's
+ * kill sweep and keeps its terminals across the update. Idempotent — safe to
+ * call from both the explicit "restart to install" action and the app-quit
+ * auto-install path.
  */
 export async function releaseDaemonForUpdate(): Promise<void> {
   // Squirrel.Mac and Linux updates do not need this Windows executable-lock
@@ -28,7 +32,8 @@ export async function releaseDaemonForUpdate(): Promise<void> {
   if (process.platform !== 'win32') return
   if (daemonReleased) return
   daemonReleased = true
-  await shutdownDaemon().catch(() => undefined)
+  const locks = await daemonLocksInstall().catch(() => true)
+  if (locks) await shutdownDaemon().catch(() => undefined)
 }
 
 // The published repository whose GitHub releases we check against.

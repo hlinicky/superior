@@ -20,6 +20,7 @@ import {
   setGlobalHotkey,
   setLanguage,
   setNotifications,
+  setAgentHooks,
   setShortcuts,
   setTheme,
   setUi,
@@ -29,6 +30,7 @@ import {
 import { applyGlobalHotkey } from '../services/global-hotkey.service'
 import { syncUsageTracking } from '../services/agent.service'
 import { handle } from './handle'
+import { ensureClaudeStateHooks, removeAllClaudeStateHooks } from '../services/claude-hooks.service'
 import { boundedString, invalidPayload, isRecord } from './validation'
 
 const THEMES = new Set(['light', 'dark', 'system', 'transparent', 'gradient', 'gradient-light'])
@@ -101,6 +103,15 @@ export function registerSettingsIpc(getWindow: () => BrowserWindow | null): void
   handle(IPC.SETTINGS_SET_NOTIFICATIONS, (enabled: boolean): AppSettings =>
     typeof enabled === 'boolean' ? setNotifications(enabled) : invalidPayload()
   )
+
+  handle(IPC.SETTINGS_SET_AGENT_HOOKS, (enabled: boolean): AppSettings => {
+    if (typeof enabled !== 'boolean') return invalidPayload()
+    const next = setAgentHooks(enabled)
+    // Claude reads hooks at startup, so this applies to newly launched sessions.
+    if (enabled) ensureClaudeStateHooks('claude')
+    else removeAllClaudeStateHooks()
+    return next
+  })
 
   // Try to register first; only persist a chord that actually took effect.
   // The hotkey callback outlives windows — it must resolve the CURRENT window

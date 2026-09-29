@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentDataEvent, AgentExitEvent, AgentSession } from './types'
+import type { AgentStateEvent } from '@shared/agent-state'
 
 // Exercise the actual singleton store and subscriptions without mounting React.
 vi.mock('react', () => ({
@@ -12,6 +13,7 @@ vi.mock('react', () => ({
 let store: typeof import('./activityStore')
 let onData: (event: AgentDataEvent) => void
 let onExit: (event: AgentExitEvent) => void
+let onState: (event: AgentStateEvent) => void
 let onFocus: () => void
 let focused: boolean
 const notifier = vi.fn()
@@ -34,7 +36,9 @@ beforeEach(async () => {
     addEventListener: (_event: string, fn: () => void) => { onFocus = fn },
     api: {
       onAgentData: (fn: typeof onData) => { onData = fn },
-      onAgentExit: (fn: typeof onExit) => { onExit = fn }
+      onAgentExit: (fn: typeof onExit) => { onExit = fn },
+      onAgentState: (fn: typeof onState) => { onState = fn },
+      getAgentStates: () => Promise.resolve([])
     }
   })
   store = await import('./activityStore')
@@ -172,5 +176,72 @@ describe('terminal activity is not task completion', () => {
     expect([...store.useAttentionSessions()]).toEqual(['b'])
     store.setActivityActiveSession('b')
     expect(store.useAttentionSessions().size).toBe(0)
+  })
+})
+
+describe('agent-reported turn state', () => {
+  it('stays busy through silent tool calls and alerts once when a titled turn ends', () => {
+    output('\x1b]0;◐ Fix the bug\x07')
+    vi.advanceTimersByTime(60_000)
+    expect(store.useBusySessions().has('a')).toBe(true)
+    output('\x1b]0;◓ Fix the bug\x07')
+    output('\x1b]0;✳ Fix the bug\x07')
+    expect(store.useBusySessions().has('a')).toBe(false)
+    expect(store.useAttentionSessions().has('a')).toBe(true)
+    expect(notifier).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a Codex spinner disappearing as the end of the turn', () => {
+    output('\x1b]0;⠦ | superior\x07')
+    output('\x1b]0;superior\x07')
+    expect(store.useBusySessions().has('a')).toBe(false)
+    expect(notifier).toHaveBeenCalledTimes(1)
+    // A plain title afterwards is not a new turn; output falls back to the pulse.
+    output('prompt redraw')
+    expect(store.useBusySessions().has('a')).toBe(true)
+  })
+
+  it('does not alert for an agent that starts idle', () => {
+    output('\x1b]0;✳ Claude Code\x07')
+    expect(store.useAttentionSessions().size).toBe(0)
+    output('banner text')
+    expect(store.useBusySessions().has('a')).toBe(false)
+  })
+
+  it('prefers hooks over the title and flags permission requests', () => {
+    onState({ id: 'a', state: 'working' })
+    output('\x1b]0;✳ stale title\x07')
+    expect(store.useBusySessions().has('a')).toBe(true)
+    onState({ id: 'a', state: 'waiting' })
+    expect(store.useBusySessions().has('a')).toBe(false)
+    expect(store.useAttentionSessions().has('a')).toBe(true)
+    expect(notifier).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores hook states for unknown or exited sessions', () => {
+    onState({ id: 'ghost', state: 'working' })
+    onExit({ id: 'b', exitCode: 0 })
+    onState({ id: 'b', state: 'working' })
+    expect(store.useBusySessions().size).toBe(0)
+  })
+
+  it('records workspace activity from terminal starts, finished turns and exits', () => {
+    const t0 = Date.now()
+    store.setActivitySessions([{ id: 'c', workspaceId: 'x', status: 'running', createdAt: 5 }] as AgentSession[])
+    expect(store.useWorkspaceActivity().get('x')).toBe(5)
+    store.setActivitySessions(sessions)
+    output('\x1b]0;◐ task\x07')
+    output('\x1b]0;✳ task\x07')
+    expect(store.useWorkspaceActivity().get('w')).toBeGreaterThanOrEqual(t0)
+    store.primeWorkspaceActivity({ w: 1, old: 7 })
+    expect(store.useWorkspaceActivity().get('w')).toBeGreaterThanOrEqual(t0)
+    expect(store.useWorkspaceActivity().get('old')).toBe(7)
+  })
+
+  it('reports waiting over working per workspace', () => {
+    onState({ id: 'a', state: 'working' })
+    expect(store.useAgentWorkspaceStates().get('w')).toBe('working')
+    onState({ id: 'b', state: 'waiting' })
+    expect(store.useAgentWorkspaceStates().get('w')).toBe('waiting')
   })
 })

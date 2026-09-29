@@ -65,7 +65,8 @@ async function startHarness(): Promise<Harness> {
       path.resolve('tsconfig.node.json'),
       path.resolve('src/daemon/index.ts'),
       socketPath,
-      logPath
+      logPath,
+      '9.9.9'
     ],
     // Keep stderr so a native node-pty/libuv abort (which never reaches the
     // daemon's log file) is still attached to a failing assertion.
@@ -186,6 +187,16 @@ async function startHarness(): Promise<Harness> {
 }
 
 describe('daemon process lifecycle', () => {
+  it('answers hello with its identity', async () => {
+    const harness = await startHarness()
+    harness.send({ t: 'hello' })
+    const info = await harness.waitFor((m) => m.t === 'info', 'an info reply')
+    expect(info).toMatchObject({ t: 'info', version: '9.9.9' })
+    if (info.t !== 'info') throw new Error('unreachable')
+    expect(info.pid).toBeGreaterThan(0)
+    expect(info.execPath).toBe(process.execPath)
+  })
+
   it('spawns a PTY and acknowledges a kill before removing the session', async (ctx) => {
     const harness = await startHarness()
     const id = randomUUID()

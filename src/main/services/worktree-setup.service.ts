@@ -144,9 +144,10 @@ export function runSetup(ws: Workspace): Promise<void> {
         persist(ws, state)
         await new Promise<void>((resolve, reject) => {
           const windows = process.platform === 'win32'
+          // cmd.exe does not understand Node's \" argument escaping; quote verbatim like `shell: true` does.
           child = spawn(windows ? (process.env.COMSPEC || 'cmd.exe') : (process.env.SHELL || '/bin/bash'),
-            windows ? ['/d', '/s', '/c', command] : ['-l', '-c', command], {
-              cwd, detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+            windows ? ['/d', '/s', '/c', `"${command}"`] : ['-l', '-c', command], {
+              cwd, detached: !windows, windowsHide: true, windowsVerbatimArguments: windows, stdio: ['ignore', 'pipe', 'pipe'],
               env: { ...process.env, SUPERIOR_PROJECT_ROOT: ws.folderPath, SUPERIOR_WORKTREE_PATH: cwd }
             })
           let timedOut = false

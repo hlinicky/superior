@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (...args: unknown[]) => void>(),
   shutdownDaemon: vi.fn(async () => undefined),
+  daemonLocksInstall: vi.fn(async () => true),
   autoUpdater: {
     autoDownload: true,
     autoInstallOnAppQuit: false,
@@ -27,6 +28,10 @@ vi.mock('./daemonClient', () => ({
   shutdownDaemon: mocks.shutdownDaemon
 }))
 
+vi.mock('./daemonHost', () => ({
+  daemonLocksInstall: mocks.daemonLocksInstall
+}))
+
 const originalPlatform = process.platform
 
 async function loadForPlatform(platform: NodeJS.Platform) {
@@ -40,6 +45,8 @@ afterEach(() => {
   mocks.listeners.clear()
   mocks.autoUpdater.on.mockClear()
   mocks.shutdownDaemon.mockClear()
+  mocks.daemonLocksInstall.mockReset()
+  mocks.daemonLocksInstall.mockResolvedValue(true)
   vi.resetModules()
 })
 
@@ -70,6 +77,30 @@ describe('update-time daemon lifecycle', () => {
     expect(isUpdatePending()).toBe(true)
     await releaseDaemonForUpdate()
     expect(isUpdatePending()).toBe(false)
+    await releaseDaemonForUpdate()
+
+    expect(mocks.shutdownDaemon).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a relocated Windows daemon (and its terminals) through the update', async () => {
+    mocks.daemonLocksInstall.mockResolvedValue(false)
+    const { initAutoUpdater, isUpdatePending, releaseDaemonForUpdate } =
+      await loadForPlatform('win32')
+
+    initAutoUpdater()
+    mocks.listeners.get('update-downloaded')?.()
+    await releaseDaemonForUpdate()
+
+    expect(isUpdatePending()).toBe(false)
+    expect(mocks.shutdownDaemon).not.toHaveBeenCalled()
+  })
+
+  it('shuts the daemon down when its location cannot be determined', async () => {
+    mocks.daemonLocksInstall.mockRejectedValue(new Error('probe failed'))
+    const { initAutoUpdater, releaseDaemonForUpdate } = await loadForPlatform('win32')
+
+    initAutoUpdater()
+    mocks.listeners.get('update-downloaded')?.()
     await releaseDaemonForUpdate()
 
     expect(mocks.shutdownDaemon).toHaveBeenCalledTimes(1)

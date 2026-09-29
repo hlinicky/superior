@@ -1,7 +1,7 @@
 import type { TFunction } from '../../i18n'
 import type { UpdateController } from '../../hooks/useUpdateCheck'
 import type { WorkspaceGitStat } from '../../hooks/useWorkspaceGitStats'
-import { BranchIcon, FolderIcon } from '../ui'
+import { FolderIcon } from '../ui'
 import type { Folder } from '../../types'
 
 export function initial(name: string): string {
@@ -150,19 +150,6 @@ export function WorkingSpinner({
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
       <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
-  )
-}
-
-/** Small branch chip shown under a worktree-backed workspace's name. */
-export function BranchBadge({ branch, title }: { branch: string; title: string }): React.JSX.Element {
-  return (
-    <span
-      title={title}
-      className="flex min-w-0 items-center gap-1 text-[11px] font-medium leading-4 text-fgdim"
-    >
-      <BranchIcon size={11} className="shrink-0" />
-      <span className="truncate">{branch}</span>
-    </span>
   )
 }
 

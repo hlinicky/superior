@@ -1,13 +1,18 @@
-import { spawn } from 'child_process'
 import { randomUUID } from 'crypto'
 import * as net from 'net'
-import { join } from 'path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { IPC } from '@shared/types'
 import { stopUsageTracking } from './usage.service'
 import {
+  installedHost,
+  markHostBroken,
+  relocatedHost,
+  socketPath,
+  spawnDaemonProcess,
+  type DaemonHost
+} from './daemonHost'
+import {
   FrameDecoder,
-  daemonSocketPath,
   encodeFrame,
   type ClientMessage,
   type DaemonSession,
@@ -63,19 +68,6 @@ const suppressReplay = new Set<string>()
 // than it answers isn't respawned in a tight loop.
 let reattachAttempts = 0
 const MAX_REATTACH_ATTEMPTS = 3
-
-function socketPath(): string {
-  return daemonSocketPath(app.getPath('userData'))
-}
-
-function logPath(): string {
-  return join(app.getPath('userData'), 'daemon.log')
-}
-
-function daemonEntry(): string {
-  // out/main/daemon.js — resolves in dev and inside the asar in production.
-  return join(app.getAppPath(), 'out', 'main', 'daemon.js')
-}
 
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -257,29 +249,48 @@ function tryConnect(): Promise<net.Socket> {
   })
 }
 
-function spawnDaemon(): void {
-  const child = spawn(process.execPath, [daemonEntry(), socketPath(), logPath()], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    detached: true,
-    stdio: 'ignore'
-  })
-  child.unref()
-}
-
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Start a daemon from `host` and wait for its socket. Resolves null when the
+ * child died on start (non-zero exit) or never came up, so the caller can fall
+ * back. Exit 0 is a daemon that found another one already listening — keep
+ * connecting, that one answers.
+ */
+async function launchAndConnect(host: DaemonHost): Promise<net.Socket | null> {
+  const child = spawnDaemonProcess(host)
+  let crashed = false
+  child.once('exit', (code) => {
+    if (code !== 0) crashed = true
+  })
+  child.once('error', () => {
+    crashed = true
+  })
+  for (let i = 0; i < 20 && !crashed; i++) {
+    await delay(Math.min(50 + i * 30, 500))
+    try {
+      return await tryConnect()
+    } catch {
+      /* keep retrying */
+    }
+  }
+  if (crashed) {
+    console.error(`[daemon] daemon from ${host.execPath} exited on start`)
+    markHostBroken(host)
+  }
+  return null
+}
 
 async function connectOrSpawn(): Promise<net.Socket> {
   try {
     return await tryConnect()
   } catch {
-    spawnDaemon()
-    for (let i = 0; i < 20; i++) {
-      await delay(Math.min(50 + i * 30, 500))
-      try {
-        return await tryConnect()
-      } catch {
-        /* keep retrying */
-      }
+    // Prefer the relocated host (Windows): it survives app updates. Fail open
+    // to the installed one, which every platform can run.
+    const relocated = await relocatedHost()
+    for (const host of relocated ? [relocated, installedHost()] : [installedHost()]) {
+      const s = await launchAndConnect(host)
+      if (s) return s
     }
     throw new Error('Terminal daemon is unavailable.')
   }
@@ -323,6 +334,7 @@ export const daemonClient = {
     cols: number
     rows: number
     meta: DaemonSessionMeta
+    env?: Record<string, string>
   }): Promise<{ pid?: number }> {
     const s = await ensureDaemon()
     const result = new Promise<{ pid?: number }>((resolve, reject) => {
@@ -420,8 +432,9 @@ export const daemonClient = {
 
 /**
  * Kill the daemon (and its ptys), waiting until it actually exits. Used before
- * an app update installs: the daemon runs the app's own executable, so a
- * lingering instance keeps a Windows lock on the file the NSIS updater must
+ * an app update installs when the daemon runs from the install dir (a fallback
+ * or pre-relocation daemon; see daemonHost.ts): it then runs the app's own
+ * executable, so a lingering instance keeps a Windows lock on the file the NSIS updater must
  * overwrite ("Superior cannot be closed. Please close it manually…"). Clearing
  * the attach set first stops the socket-close handler from respawning it, and a
  * missing daemon is a no-op (never spawn one just to kill it). Bounded so a

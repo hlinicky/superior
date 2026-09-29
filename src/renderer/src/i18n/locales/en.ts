@@ -1,8 +1,10 @@
 import { setupEn } from '../worktreeSetup'
 import { terminalSettingsEn } from '../terminalSettings'
 import { onboardingEn } from '../onboarding'
+import { elevationEn } from '../elevation'
 export const en = {
   ...setupEn,
+  ...elevationEn,
   ...terminalSettingsEn,
   'browser.navigation': "Browser navigation",
   'browser.back': "Back",
@@ -60,6 +62,11 @@ export const en = {
   'pane.top': '↑ Above',
   'pane.bottom': '↓ Below',
   'sidebar.openProject': 'Open / Clone project',
+  'sidebar.sortBy': "Sort workspaces",
+  'sidebar.sortRecent': "Recent",
+  'sidebar.sortSmart': "Smart",
+  'sidebar.sortName': "Name",
+  'sidebar.sortManual': "Manual",
   'sidebar.noWorkspaces': 'No folders yet — open one.',
   'sidebar.removeFromList': 'Remove from list',
   'sidebar.addWorkspace': 'Add workspace',
@@ -71,8 +78,6 @@ export const en = {
   'sidebar.removeFolder': 'Remove folder',
   'sidebar.removeFolderConfirm':
     'Remove “{name}” from the list? Its workspaces close and running terminals stop. Files on disk are untouched.',
-  'menu.folderActions': 'Folder actions',
-  'menu.workspaceActions': 'Workspace actions',
   'grid.dividerHint': 'Drag to resize · hold Alt to resize freely',
   'profile.label': 'Profile',
   'profile.switch': 'Switch profile',
@@ -212,6 +217,9 @@ export const en = {
   'keyboard.globalHotkeyUnset': 'Not set',
   'palette.placeholder': 'Type a command…',
   'palette.noResults': 'No matching commands',
+  'palette.open': 'Open',
+  'palette.close': 'Close',
+  'palette.move': 'Move',
   'palette.sectionWorkspaces': 'Workspaces',
   'palette.sectionProfiles': 'Profiles',
   'palette.sectionTerminals': 'Terminals',
@@ -224,6 +232,8 @@ export const en = {
   'search.close': 'Close search',
   'notify.setting': 'Notifications',
   'notify.settingDesc': 'Notify when a terminal requests attention or its process exits while the app is in the background.',
+  'agentHooks.setting': "Exact Claude status",
+  'agentHooks.settingDesc': "Adds hooks to Claude's settings.json so terminals show exactly when Claude works, waits for permission, or finishes. Applies to newly started sessions.",
   'notify.finishedTitle': '{label} needs attention',
   'notify.finishedBody': 'Check the terminal in workspace {workspace}.',
   'keyboard.recording': 'Press keys…',

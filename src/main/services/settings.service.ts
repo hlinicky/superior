@@ -74,6 +74,7 @@ const DEFAULTS: AppSettings = {
   usageTracking: false,
   usagePrimary: 'remaining',
   notifications: true,
+  agentHooks: true,
   globalHotkey: null,
   fileOpener: 'system'
 }
@@ -139,6 +140,18 @@ function normalizeUi(raw: unknown): UiState {
     next.usageFooterProfiles = normalizeIds(obj.usageFooterProfiles, 100)
     if (typeof obj.usageFooterRemaining === 'boolean') next.usageFooterRemaining = obj.usageFooterRemaining
     if (typeof obj.usageFooterCompact === 'boolean') next.usageFooterCompact = obj.usageFooterCompact
+    if (['recent', 'smart', 'name', 'manual'].includes(obj.workspaceSort as string))
+      next.workspaceSort = obj.workspaceSort as UiState['workspaceSort']
+    next.workspaceOrder = normalizeIds(obj.workspaceOrder, 2000)
+    if (obj.workspaceActivity && typeof obj.workspaceActivity === 'object' && !Array.isArray(obj.workspaceActivity)) {
+      const entries = Object.entries(obj.workspaceActivity as Record<string, unknown>)
+        .filter((entry): entry is [string, number] => entry[0].length <= 200 && typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 500)
+      next.workspaceActivity = Object.fromEntries(entries)
+    }
+    if (typeof obj.elevationWarningDismissed === 'boolean')
+      next.elevationWarningDismissed = obj.elevationWarningDismissed
     if (typeof obj.rightPanelWidth === 'number' && Number.isFinite(obj.rightPanelWidth))
       next.rightPanelWidth = Math.min(560, Math.max(280, Math.round(obj.rightPanelWidth)))
   }
@@ -196,6 +209,7 @@ export function getSettings(): AppSettings {
       : DEFAULTS.usagePrimary,
     notifications:
       typeof parsed.notifications === 'boolean' ? parsed.notifications : DEFAULTS.notifications,
+    agentHooks: typeof parsed.agentHooks === 'boolean' ? parsed.agentHooks : DEFAULTS.agentHooks,
     globalHotkey:
       typeof parsed.globalHotkey === 'string' && parsed.globalHotkey.trim()
         ? parsed.globalHotkey
@@ -298,6 +312,13 @@ export function setNotifications(enabled: boolean): AppSettings {
     ...getSettings(),
     notifications: Boolean(enabled)
   }
+  save(next)
+  return next
+}
+
+/** Persist whether Claude state hooks are installed. */
+export function setAgentHooks(enabled: boolean): AppSettings {
+  const next: AppSettings = { ...getSettings(), agentHooks: Boolean(enabled) }
   save(next)
   return next
 }
